@@ -5,8 +5,7 @@
 #'   dataset should be read in (e.g., only the control arm if constructing a
 #'   posterior distribution for the control mean).
 #'
-#' @param internal_data This can either be a propensity score object or a tibble
-#'   of the internal data.
+#' @param internal_data A tibble of the internal data.
 #' @param response Name of response variable
 #' @param prior A distributional object corresponding to a normal distribution,
 #'   a t distribution, or a mixture distribution of normal and/or t components
@@ -15,7 +14,7 @@
 #'
 #' @details For a given arm of an internal trial (e.g., the control arm or an
 #'   active treatment arm) of size \eqn{N_I}, suppose the response data are normally
-#'   distributed such that \eqn{y_i \sim N(\theta, \sigma_I^2)}, \eqn{i=1,\ldots,N_I}.
+#'   distributed such that \eqn{Y_i \sim N(\theta, \sigma_I^2)}, \eqn{i=1,\ldots,N_I}.
 #'   If \eqn{\sigma_I^2} is assumed known, the posterior distribution for \eqn{\theta}
 #'   is written as
 #'
@@ -65,17 +64,11 @@ calc_post_norm<- function(
     internal_sd = NULL
 ){
   # Checking internal data and response variable
-  if(is_prop_scr(internal_data)){
-    data <- internal_data$internal_df
-    nIC <- internal_data$internal_df |>
-      pull(!!internal_data$id_col) |>
-      unique() |>
-      length()
-  } else if(is.data.frame(internal_data)) {
+  if(is.data.frame(internal_data)) {
     data <- internal_data
     nIC <- nrow(internal_data)
   } else{
-    cli_abort("{.agr internal_data} either a dataset or `prop_scr` object type")
+    cli_abort("{.agr internal_data} a dataset")
   }
 
   # Check response exists in the data and calculate the sum
@@ -93,24 +86,31 @@ calc_post_norm<- function(
 
   # With known internal SD
   if(!is.null(internal_sd)) {
-    # Sum of responses in internal arm
-    sum_resp <- pull(data, !!response) |>
-      sum()
-    if(prior_fam == "normal"){
-      out_dist <- calc_norm_post(prior, internal_sd, nIC, sum_resp)
-    } else if (prior_fam == "student_t") {
-      out_dist <- t_to_mixnorm(prior) |>
-        calc_mixnorm_post(internal_sd, nIC, sum_resp)
-    } else if(prior_fam == "mixture") {
-      out_dist <- mix_t_to_mix(prior) |>
-        calc_mixnorm_post(internal_sd, nIC, sum_resp)
+    if(is.numeric(internal_sd) && internal_sd > 0){
+      # Sum of responses in internal arm
+      sum_resp <- pull(data, !!response) |>
+        sum()
+      if(prior_fam == "normal"){
+        out_dist <- calc_norm_post(prior, internal_sd, nIC, sum_resp)
+      } else if (prior_fam == "student_t") {
+        out_dist <- t_to_mixnorm(prior) |>
+          calc_mixnorm_post(internal_sd, nIC, sum_resp)
+      } else if(prior_fam == "mixture") {
+        out_dist <- mix_t_to_mix(prior) |>
+          calc_mixnorm_post(internal_sd, nIC, sum_resp)
+      } else {
+        cli_abort("{.agr prior} must be either normal, t, or a mixture of normals and t")
+      }
     } else {
-      cli_abort("{.agr prior} must be either normal, t, or a mixture of normals and t")
+      cli_abort("{.agr internal_sd} must be a positive number if a prior is being supplied")
     }
+
   } else {
-    if(prior_fam == "student_t") {
+    if(prior_fam == "normal"){
+      out_dist <- calc_t_post(prior, nIC, pull(data, !!response))
+    } else if(prior_fam == "student_t") {
       out_dist <- t_to_mixnorm(prior) |>
-        calc_t_post(nIC, pull(data, !!response))
+      calc_t_post(nIC, pull(data, !!response))
     } else if(prior_fam == "mixture") {
       out_dist <- mix_t_to_mix(prior) |>
         calc_t_post(nIC, pull(data, !!response))
@@ -131,15 +131,14 @@ calc_post_norm<- function(
 #'   dataset should be read in (e.g., only the control arm if constructing a
 #'   posterior distribution for the control response rate).
 #'
-#' @param internal_data This can either be a propensity score object or a tibble
-#'   of the internal data.
+#' @param internal_data A tibble of the internal data.
 #' @param response Name of response variable
 #' @param prior A distributional object corresponding to a beta distribution
 #'   or a mixture distribution of beta components
 #'
 #' @details For a given arm of an internal trial (e.g., the control arm or an
 #' active treatment arm) of size \eqn{N_I}, suppose the response data are binary
-#' such that \eqn{y_i \sim \mbox{Bernoulli}(\theta)}, \eqn{i=1,\ldots,N_I}. The
+#' such that \eqn{Y_i \sim \mbox{Bernoulli}(\theta)}, \eqn{i=1,\ldots,N_I}. The
 #' posterior distribution for \eqn{\theta} is written as
 #'
 #' \deqn{\pi( \theta \mid \boldsymbol{y} ) \propto \mathcal{L}(\theta \mid \boldsymbol{y}) \; \pi(\theta),}
@@ -161,21 +160,15 @@ calc_post_norm<- function(
 #' library(dplyr)
 #' library(distributional)
 #' calc_post_beta(internal_data = filter(int_binary_df, trt == 1),
-#'                               response = y,
-#'                               prior = dist_beta(0.5, 0.5))
+#'                response = y,
+#'                prior = dist_beta(0.5, 0.5))
 calc_post_beta<- function(internal_data, response, prior){
   # Checking internal data and response variable
-  if(is_prop_scr(internal_data)){
-    data <- internal_data$internal_df
-    nIC <- internal_data$internal_df |>
-      pull(!!internal_data$id_col) |>
-      unique() |>
-      length()
-  } else if(is.data.frame(internal_data)) {
+  if(is.data.frame(internal_data)) {
     data <- internal_data
     nIC <- nrow(internal_data)
   } else{
-    cli_abort("{.agr internal_data} either a dataset or `prop_scr` object type")
+    cli_abort("{.agr internal_data} a dataset")
   }
 
   # Check response exists in the data and calculate the sum
@@ -226,6 +219,179 @@ calc_post_beta<- function(internal_data, response, prior){
 
 
 
+#' Calculate Posterior Weibull
+#'
+#' @description Calculate a posterior distribution for the probability of
+#'   surviving past a given analysis time(s) for time-to-event data with a
+#'   Weibull likelihood. Only the relevant treatment arms from the internal
+#'   dataset should be read in (e.g., only the control arm if constructing a
+#'   posterior distribution for the control survival probability).
+#'
+#' @param internal_data This can either be a propensity score object or a tibble
+#'   of the internal data.
+#' @param response Name of response variable
+#' @param event Name of event indicator variable (1: event; 0: censored)
+#' @param prior A distributional object corresponding to a multivariate normal
+#'   distribution or a mixture of 2 multivariate normals. The first element
+#'   of the mean vector and the first row/column of covariance matrix correspond
+#'   to the log-shape parameter, and the second element corresponds to the intercept
+#'   (i.e., log-inverse-scale) parameter.
+#' @param analysis_time Vector of time(s) when survival probabilities will be
+#'   calculated
+#' @param ... rstan sampling option. This overrides any default options. For more
+#'   information, see [rstan::sampling()]
+#'
+#' @details For a given arm of an internal trial (e.g., the control arm or an
+#'   active treatment arm) of size \eqn{N_I}, suppose the response data are time to event
+#'   such that \eqn{Y_i \sim \mbox{Weibull}(\alpha, \sigma)}, where
+#'
+#'   \deqn{f(y_i \mid \alpha, \sigma) = \left( \frac{\alpha}{\sigma} \right) \left( \frac{y_i}{\sigma}
+#'   \right)^{\alpha - 1} \exp \left( -\left( \frac{y_i}{\sigma} \right)^\alpha
+#'   \right),}
+#'
+#'   \eqn{i=1,\ldots,N_I}. Define \eqn{\boldsymbol{\theta} = \{\log(\alpha), \beta\}}
+#'   where \eqn{\beta = -\log(\sigma)} is the intercept parameter of a Weibull
+#'   proportional hazards regression model. The posterior distribution for
+#'   \eqn{\boldsymbol{\theta}} is written as
+#'
+#'   \deqn{\pi( \boldsymbol{\theta} \mid \boldsymbol{y}, \boldsymbol{\nu} ) \propto
+#'   \mathcal{L}(\boldsymbol{\theta} \mid \boldsymbol{y}, \boldsymbol{\nu}) \;
+#'   \pi(\boldsymbol{\theta}),}
+#'
+#'   where \eqn{\mathcal{L}(\boldsymbol{\theta} \mid \boldsymbol{y}, \boldsymbol{\nu}) =
+#'   \prod_{i=1}^{N_I} f(y_i \mid \boldsymbol{\theta})^{\nu_i} S(y_i \mid \boldsymbol{\theta})^{1 - \nu_i}}
+#'   is the likelihood of the response data from the internal arm with event indicator
+#'   \eqn{\boldsymbol{\nu}} and survival function \eqn{S(y_i \mid \boldsymbol{\theta}) =
+#'   1 - F(y_i \mid \boldsymbol{\theta})}, and \eqn{\pi(\boldsymbol{\theta})} is a prior
+#'   distribution on \eqn{\boldsymbol{\theta}} (either a multivariate normal distribution or a
+#'   mixture of two multivariate normal distributions). Note that the posterior distribution
+#'   for \eqn{\boldsymbol{\theta}} does not have a closed form, and thus MCMC samples
+#'   for \eqn{\log(\alpha)} and \eqn{\beta} are drawn from the posterior. These MCMC
+#'   samples are used to construct samples from the posterior distribution
+#'   for the probability of surviving past the specified analysis time(s) for the
+#'   given arm.
+#'
+#'   To construct a posterior distribution for the treatment difference (i.e., the
+#'   difference in survival probabilities at the specified analysis time), obtain MCMC
+#'   samples from the posterior distributions for the survival probabilities under
+#'   each arm and then subtract the control-arm samples from the treatment-arm
+#'   samples.
+#'
+#' @return stan posterior object
+#' @export
+#' @importFrom rstan sampling
+#' @examples
+#' library(distributional)
+#' library(dplyr)
+#' library(rstan)
+#' mvn_prior <- dist_multivariate_normal(
+#'    mu = list(c(0.3, -2.6)),
+#'    sigma = list(matrix(c(1.5, 0.3, 0.3, 1.1), nrow = 2)))
+#' post_treated <- calc_post_weibull(filter(int_tte_df, trt == 1),
+#'                                   response = y,
+#'                                   event = event,
+#'                                   prior = mvn_prior,
+#'                                   analysis_time = 12,
+#'                                   warmup = 5000,
+#'                                   iter = 15000)
+#' # Extract MCMC samples of survival probabilities at time t=12
+#' surv_prob_treated <- as.data.frame(extract(post_treated,
+#'                                    pars = c("survProb")))[,1]
+calc_post_weibull <- function(internal_data,
+                              response, event,
+                              prior,
+                              analysis_time,
+                              ...){
+  # Checking internal data and response variable
+  if(is_prop_scr(internal_data)){
+    data <- internal_data$internal_df
+    nIC <- internal_data$internal_df |>
+      pull(!!internal_data$id_col) |>
+      unique() |>
+      length()
+  } else if(is.data.frame(internal_data)) {
+    data <- internal_data
+    nIC <- nrow(internal_data)
+  } else{
+    cli_abort("{.agr internal_data} either a dataset or `prop_scr` object type")
+  }
+
+  # Check response exists in the data
+  response <- enquo(response)
+  check <- safely(select)(data, !!response)
+  if(!is.null(check$error)){
+    cli_abort("{.agr response} was not found in {.agr internal_data}")
+  }
+
+  # Check event indicator exists in the data
+  event <- enquo(event)
+  check <- safely(select)(data, !!event)
+  if(!is.null(check$error)){
+    cli_abort("{.agr event} was not found in {.agr internal_data}")
+  }
+
+  # Check analysis time is valid
+  if(!all(is.numeric(analysis_time))){
+    cli_abort("{.agr analysis_time} must be a numeric vector")
+  }
+
+  # Checking the distribution and getting the family
+  if(!is_distribution(prior)){
+    cli_abort("{.agr prior} must be a distributional object")
+  }
+  prior_fam <- family(prior)
+
+  if(prior_fam == "mvnorm"){
+    mean <- parameters(prior)$mu[[1]]
+    cov <- parameters(prior)$sigma[[1]]
+    stan_data_post_inputs <- list(
+      N = nIC,   # internal sample size of given arm
+      y = pull(data, !!response),       # observed time (event or censored)
+      e = pull(data, !!event),   # event indicator (1: event; 0: censored)
+      K = length(analysis_time),              # number of times to compute survival probabilities
+      times = as.array(analysis_time),        # time(s) when survival probability should be calculated
+      mean_inf = mean,      # mean vector of informative prior component
+      mean_vague = mean,  # mean vector of vague prior component
+      cov_inf = cov,        # covariance matrix of informative prior component
+      cov_vague = cov,    # covariance matrix of vague prior component
+      w0 = 0                          # prior mixture weight associated with informative component
+    )
+
+  } else if(prior_fam == "mixture" &&  length(get_base_families(prior)[[1]]) == 2) {
+    means <- mix_means(prior)
+    covs <- mix_sigmas(prior)
+    weight <- parameters(prior)$w[[1]][1] # Weight of robust mixture prior (RMP) associated with informative component
+
+    stan_data_post_inputs <- list(
+      N = nIC,   # internal sample size of given arm
+      y = pull(data, !!response),       # observed time (event or censored)
+      e = pull(data, !!event),   # event indicator (1: event; 0: censored)
+      K = length(analysis_time),              # number of times to compute survival probabilities
+      times = as.array(analysis_time),        # time(s) when survival probability should be calculated
+      mean_inf = means[[1]],      # mean vector of informative prior component
+      mean_vague = means[[2]],  # mean vector of vague prior component
+      cov_inf = covs[[1]],        # covariance matrix of informative prior component
+      cov_vague = covs[[2]],    # covariance matrix of vague prior component
+      w0 = weight                        # prior mixture weight associated with informative component
+    )
+
+
+
+  } else {
+    cli_abort("{.agr prior} must be a multivariate normal distributional object or a mixture of 2 multivariate normal objects")
+    }
+  post <- sampling_optional_inputs(list(stanmodels$weibullpost,
+                                        data = stan_data_post_inputs,
+                                        warmup = 15000,       # number of burn-in iterations to discard
+                                        iter = 45000,         # total number of iterations (including burn-in)
+                                        chains = 1,           # number of chains
+                                        cores = 1,            # number of cores
+                                        refresh = 0),
+                                   ...)
+  post
+
+}
+
 #' Internal function to approximate t distributions to a mixture of normals
 #'
 #' @param x A distributional object
@@ -235,6 +401,7 @@ calc_post_beta<- function(internal_data, response, prior){
 #' @importFrom purrr quietly
 #' @importFrom stats quantile
 #' @importFrom distributional variance
+#' @importFrom mixtools normalmixEM
 t_to_mixnorm <- function(x){
   # distribution is constrained to equal the mean of the t distribution
   # quantiles of t distribution
@@ -349,6 +516,8 @@ calc_norm_post <- function(prior, internal_sd, n_ic, sum_resp){
 }
 
 
+
+
 #' Internal function to help determine the family of an object
 #'
 #' @param x Distributional object
@@ -372,9 +541,15 @@ calc_t_post <- function(prior, nIC, response){
   like_sds <- mix_sigmas(int_like)
   like_ws <- parameters(int_like)$w[[1]]
 
-  prior_means <- mix_means(prior)
-  prior_sds <- mix_sigmas(prior)
-  prior_ws <- parameters(prior)$w[[1]]
+  if( family(prior) == "mixture" ){
+    prior_means <- mix_means(prior)
+    prior_sds <- mix_sigmas(prior)
+    prior_ws <- parameters(prior)$w[[1]]
+  } else if( family(prior) == "normal" ){
+    prior_means <- parameters(prior)$mu
+    prior_sds <- parameters(prior)$sigma
+    prior_ws <- 1
+  }
 
   # 2*K x 1 vectors of means and SDs of each normal component of posterior distribution for theta
   K <- length(prior_means)
@@ -407,14 +582,65 @@ calc_t_post <- function(prior, nIC, response){
 
 }
 
+
+
+#' Extract Means of Mixture Components
+#'
+#' @param x A mixture distributional object
+#'
+#' @details If a distributional object that is a mixture of two or more normal
+#'   distributions is read in, the function will return a numeric object with
+#'   the means of each normal component. If the distributional object is a
+#'   mixture of two or more multivariate normal distributions, the function
+#'   will return a list with the mean vectors of each multivariate normal
+#'   component.
+#'
+#' @return numeric or list object
+#' @export
+#'
+#' @examples
+#' library(distributional)
+#' mix_norm <- dist_mixture(comp1 = dist_normal(1, 10),
+#'                          comp2 = dist_normal(1.5, 12),
+#'                          weights = c(.5, .5))
+#' mix_means(mix_norm)
 mix_means <- function(x){
-  parameters(x)$dist[[1]]|>
-    map(\(dist) dist$mu) |>
-    unlist()
+  out <- parameters(x)$dist[[1]]|>
+    map(\(dist) dist$mu)
+  if(length(unlist(out)) == length(out)){
+    out <- out |> unlist()
+  }
+  out
+
 }
 
+
+
+#' Extract Standard Deviations of Mixture Components
+#'
+#' @param x A mixture distributional object
+#'
+#' @details If a distributional object that is a mixture of two or more normal
+#'   distributions is read in, the function will return a numeric object with
+#'   the standard deviations of each normal component. If the distributional
+#'   object is a mixture of two or more multivariate normal distributions, the
+#'   function will return a list with the covariance matrices of each multivariate
+#'   normal component.
+#'
+#' @return numeric or list object
+#' @export
+#'
+#' @examples
+#' library(distributional)
+#' mix_norm <- dist_mixture(comp1 = dist_normal(1, 10),
+#'                          comp2 = dist_normal(1.5, 12),
+#'                          weights = c(.5, .5))
+#' mix_sigmas(mix_norm)
 mix_sigmas <- function(x){
-  parameters(x)$dist[[1]]|>
-    map(\(dist) dist$sigma) |>
-    unlist()
+  out <- parameters(x)$dist[[1]]|>
+    map(\(dist) dist$sigma)
+  if(length(unlist(out)) == length(out)){
+    out <- out |> unlist()
+  }
+  out
 }

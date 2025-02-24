@@ -10,15 +10,17 @@ experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](h
 [![CRAN
 status](https://www.r-pkg.org/badges/version/beastt)](https://CRAN.R-project.org/package=beastt)
 [![R-CMD-check](https://github.com/GSK-Biostatistics/beastt/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/GSK-Biostatistics/beastt/actions/workflows/R-CMD-check.yaml)
+[![codecov](https://codecov.io/gh/GSK-Biostatistics/beastt/graph/badge.svg?token=UVH8SF4OXT)](https://app.codecov.io/gh/GSK-Biostatistics/beastt)
 
 <!-- badges: end -->
 
 ## Overview
 
-Welcome to the “beastt” package! This R package is designed to assist
-users in performing Bayesian dynamic borrowing with covariate adjustment
-via inverse probability weighting for simulations and data analyses in
-clinical trials.
+Welcome to the {[beastt](https://gsk-biostatistics.github.io/beastt/)}
+package! This R package is designed to assist users in performing
+Bayesian dynamic borrowing with covariate adjustment via inverse
+probability weighting for simulations and data analyses in clinical
+trials.
 
 ## Installation
 

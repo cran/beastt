@@ -7,8 +7,7 @@
 calc_post_norm(internal_data, response, prior, internal_sd = NULL)
 }
 \arguments{
-\item{internal_data}{This can either be a propensity score object or a tibble
-of the internal data.}
+\item{internal_data}{A tibble of the internal data.}
 
 \item{response}{Name of response variable}
 
@@ -30,7 +29,7 @@ posterior distribution for the control mean).
 \details{
 For a given arm of an internal trial (e.g., the control arm or an
 active treatment arm) of size \eqn{N_I}, suppose the response data are normally
-distributed such that \eqn{y_i \sim N(\theta, \sigma_I^2)}, \eqn{i=1,\ldots,N_I}.
+distributed such that \eqn{Y_i \sim N(\theta, \sigma_I^2)}, \eqn{i=1,\ldots,N_I}.
 If \eqn{\sigma_I^2} is assumed known, the posterior distribution for \eqn{\theta}
 is written as
 

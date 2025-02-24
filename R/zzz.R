@@ -1,4 +1,4 @@
-globalVariables(c("binomial", ".data"))
+globalVariables(c("binomial", ".data", ".env"))
 
 
 #' @importFrom generics glance
@@ -8,4 +8,3 @@ generics::glance
 #' @importFrom generics tidy
 #' @export
 generics::tidy
-

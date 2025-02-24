@@ -41,7 +41,7 @@
 #'   subject.
 #' @export
 #' @importFrom rlang f_rhs f_lhs `f_lhs<-` is_formula enquo as_name
-#' @importFrom stringr str_split_1 str_detect
+#' @importFrom stringr str_split_1 str_detect str_extract str_remove_all
 #' @importFrom cli cli_abort
 #' @importFrom purrr reduce discard
 #' @importFrom rlang sym
@@ -192,16 +192,30 @@ print.prop_scr <- function(x, ..., n = 10){
   print(x$abs_std_mean_diff)
 }
 
+
+#' Tidy a(n) prop_scr object
+#'
+#' @param x a `prop_scr` obj
+#'
+#' @param ... Unused, included for generic consistency only.
+#' @return A tidy [tibble::tibble()] summarizing the results of the propensity
+#'   score weighting. The tibble will have the id column of the external data,
+#'   an `internal` column to indicate all the data is external, a `ps` column
+#'   with the propensity scores and a `weight` column with the inverse
+#'   probability weights
+#'
 #' @export
+#' @examples
+#' library(dplyr)
+#' ps_obj <- calc_prop_scr(internal_df = filter(int_binary_df, trt == 0),
+#'                        external_df = ex_binary_df,
+#'                        id_col = subjid,
+#'                        model = ~ cov1 + cov2 + cov3 + cov4)
+#' tidy(ps_obj)
+#'
 tidy.prop_scr <- function(x, ...){
   x$external_df |>
-    select(!!x$id_col,.data$`___internal___`, .data$`___ps___`, .data$`___weight___`)
-}
-
-#' @export
-glance.prop_scr <- function(x, ...){
-  x$external_df |>
-    bind_rows(x$internal_df)
+    select(!!x$id_col,internal = .data$`___internal___`, ps = .data$`___ps___`, weight = .data$`___weight___`)
 }
 
 
@@ -256,9 +270,10 @@ test_prop_scr <- function(x){
 #' @return ggplot object
 #' @export
 #' @importFrom ggplot2 ggplot aes geom_histogram labs scale_fill_manual ggtitle
-#'    theme_bw
+#'    theme_bw after_stat
 #' @importFrom dplyr bind_rows
 #' @importFrom stringr str_glue
+#' @importFrom stats density
 #' @examples
 #' library(dplyr)
 #' ps_obj <- calc_prop_scr(internal_df = filter(int_norm_df, trt == 0),
@@ -288,8 +303,8 @@ prop_scr_hist <- function(x, variable = c("propensity score", "ps", "inverse pro
   }
 
   plot <-   .data|>
-    ggplot(aes(x = !!x_var, fill = .data$`___internal___`)) +
-    labs(y = "", x = x_label, fill = "Dataset") +
+    ggplot(aes(x = !!x_var, fill = .data$`___internal___`, y=after_stat(density))) +
+    labs(y = "Density", x = x_label, fill = "Dataset") +
     scale_fill_manual(values = c("#FFA21F", "#5398BE"),
                       labels = c("TRUE" =  "Internal", "FALSE" = "External")) +
     ggtitle(str_glue("Histogram of {x_label}s")) +
@@ -297,7 +312,7 @@ prop_scr_hist <- function(x, variable = c("propensity score", "ps", "inverse pro
 
   if(length(list(...)) == 0) {
     plot <- plot +
-      geom_histogram(position = "identity", binwidth = .05)
+      geom_histogram(position = "identity", binwidth = .05, alpha=0.5)
   } else {
     plot <- plot +
       geom_histogram(position = "identity", ...)
