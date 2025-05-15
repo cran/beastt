@@ -181,12 +181,17 @@ print.prop_scr <- function(x, ..., n = 10){
   cli_bullets(c("*" = f_rhs(x$model)))
 
   cli_h1("Propensity Scores and Weights")
+  ess <- round(sum(x$external_df$`___weight___`),0)
+
+  cli_bullets(c("*" = str_glue("Effective sample size of the external arm: {ess}")))
   x$external_df |>
     select(!!x$id_col,
            Internal = .data$`___internal___`,
            `Propensity Score` = .data$`___ps___`,
            `Inverse Probability Weight` = .data$`___weight___`) |>
     print(n = n)
+
+
 
   cli_h1("Absolute Standardized Mean Difference")
   print(x$abs_std_mean_diff)
@@ -369,24 +374,21 @@ prop_scr_dens <- function(x, variable = c("propensity score", "ps", "inverse pro
     .data <- x$external_df
   }
 
+  colors <- c("#FFA21F", "#5398BE")
+
   plot <-   .data |>
-    ggplot(aes(x = !!x_var, fill = .data$`___internal___`)) +
-    labs(y = "Density", x = x_label, fill = "Dataset") +
-    scale_fill_manual(values = c("#FFA21F", "#5398BE"),
+    ggplot(aes(x = !!x_var)) +
+    labs(y = "Density", x = x_label, fill = "Dataset", color = "Dataset") +
+    geom_density(aes(color = .data$`___internal___`, fill = .data$`___internal___`),
+                 alpha = 0.5) +
+    scale_fill_manual(values = colors,
                       labels = c("TRUE" =  "Internal", "FALSE" = "External")) +
+    scale_color_manual(values = colors,
+                       labels = c("TRUE" =  "Internal", "FALSE" = "External")) +
     ggtitle(str_glue("Density of {x_label}s")) +
     theme_bw()
 
-  if(length(list(...)) == 0) {
-    plot <- plot +
-      geom_density(alpha = 0.5)
-  } else {
-    plot <- plot +
-      geom_density(...)
-  }
-
   plot
-
 }
 
 
@@ -439,4 +441,207 @@ prop_scr_love <- function(x, reference_line = NULL, ...){
 }
 
 
+#' Trim a `prop_scr` object
+#'
+#' @param x A `prop_scr` object
+#' @param low Low cut-off such that all participants with propensity scores less
+#'   than this value (or quantile if `quantile = TRUE`) are removed.  If left
+#'   `NULL` no lower bound will be used
+#' @param high High cut-off such that all participants with propensity scores
+#'   greater than this value (or quantile if `quantile = TRUE`) are removed. If
+#'   left `NULL` no upper bound will be used
+#' @param quantile True/False value to determine if the cut-off values are based
+#'   directly on the propensity scores (false) or their quantiles (true). By default this is
+#'   false.
+#' @return a `prop_scr` object with a trimmed propensity score distribution
+#'
+#' @details This function uses R's default method of quantile calculation (type
+#' 7)
+#'
+#'
+#' @importFrom rlang is_empty
+#' @export
+#' @examples
+#' library(dplyr)
+#' ps_obj <- calc_prop_scr(internal_df = filter(int_binary_df, trt == 0),
+#'                        external_df = ex_binary_df,
+#'                        id_col = subjid,
+#'                        model = ~ cov1 + cov2 + cov3 + cov4)
+#' trim_ps(ps_obj, low = 0.3, high = 0.7)
+#'
+trim_ps <- function(x, low = NULL, high = NULL, quantile = FALSE){
+  test_prop_scr(x)
 
+
+  if(quantile) {
+    ps_vals <- x$external_df |>
+      pull(.data$`___ps___`)
+    low <- quantile(ps_vals, low)
+    high <-  quantile(ps_vals, high)
+
+  }
+
+  if(!is.null(low) && !is_empty(low)){
+    if(low < 0){
+      cli_abort("{.arg low} must be above 0" )
+    }
+    x$external_df <- x$external_df |>
+      filter(.data$`___ps___` >= low)
+  }
+
+  if(!is.null(high) && !is_empty(high)){
+    if(high > 1){
+      cli_abort("{.arg high} must be below 1" )
+    }
+    x$external_df <- x$external_df |>
+      filter(.data$`___ps___` <= high)
+  }
+
+  x |>
+    refit_ps_obj()
+}
+
+#' Rescale a `prop_scr` object
+#'
+#' @param x a `prop_scr` obj
+#' @param n Desired sample size that the external data should effectively
+#'   contribute to the analysis of the internal trial data. This will be used to
+#'   scale the external weights if `scale_factor` is not specified
+#' @param scale_factor Value to multiple all weights by. This will be used to
+#'   scale the external weights if `n` is not specified
+#' @return a `prop_scr` object with rescaled weights
+#'
+#' @export
+#' @examples
+#' library(dplyr)
+#' ps_obj <- calc_prop_scr(internal_df = filter(int_binary_df, trt == 0),
+#'                        external_df = ex_binary_df,
+#'                        id_col = subjid,
+#'                        model = ~ cov1 + cov2 + cov3 + cov4)
+#' # weights in a propensity score object can be rescaled to achieve a desired
+#' # effective sample size (i.e., sum of weights)
+#' rescale_ps(ps_obj, n = 75)
+#'
+#' # Or by a predetermined factor
+#' rescale_ps(ps_obj, scale_factor = 1.5)
+#'
+rescale_ps <- function(x, n = NULL, scale_factor = NULL){
+  test_prop_scr(x)
+  if(!is.null(n) & !is.null(scale_factor)){
+    cli_abort("{.arg n} and {.arg scale_factor} are both not `NULL`, only one input can be used")
+  }
+
+  if(is.null(n) & is.null(scale_factor)){
+    cli_abort("{.arg n} and {.arg scale_factor} are both `NULL`, one input is required")
+  }
+
+
+
+  if(!is.null(n)){
+    external_sample <- sum(x$external_df$`___weight___`)
+    scale_factor <- n/external_sample
+  }
+
+    x$external_df <- x$external_df |>
+      mutate(`___weight___` = .data$`___weight___`*scale_factor)
+
+  x
+}
+
+
+#' Refit the absolute standardized mean differences in a `prop_scr` object
+#'
+#' Used when an object is trimmed to refit the absolute standarized
+#' mean differences
+#'
+#' @param x `prop_scr` object
+#'
+#' @returns `prop_scr` object with corrected absolute standardized mean differences
+#' @noRd
+refit_ps_obj <- function (x){
+  all_df_ps <- bind_rows(x$external_df, x$internal_df)
+
+  covriates <- all.vars(f_rhs(x$model))
+  # Calculating the absolute standardized mean difference
+  asmd_adj <- bal.tab(select(all_df_ps, !!covriates), # df of covariates (internal and external)
+                      treat = all_df_ps$`___internal___`,   # internal indicator
+                      binary = "std",         # use standardized version of mean differences for binary covariates
+                      continuous = "std",     # use standardized version of mean differences for continuous covariates
+                      s.d.denom = "pooled",   # calculation of the denominator of SMD
+                      weights = all_df_ps$`___weight___`,
+                      abs = TRUE)$Balance
+
+  asmd_unadj <- bal.tab(select(all_df_ps, !!covriates), # df of covariates (internal and external)
+                        treat = all_df_ps$`___internal___`,   # internal indicator
+                        binary = "std",         # use standardized version of mean differences for binary covariates
+                        continuous = "std",     # use standardized version of mean differences for continuous covariates
+                        s.d.denom = "pooled",   # calculation of the denominator of SMD
+                        abs = TRUE)$Balance
+
+  asmd_clean <- tibble(
+    covariate = rownames(asmd_adj),
+    diff_unadj = asmd_unadj[,2],
+    diff_adj = asmd_adj[,3],
+  )
+
+  x$abs_std_mean_diff <- asmd_clean
+
+  x
+}
+
+#' Propensity Score Cloud Plot
+#'
+#' @param x A `prop_scr` object
+#' @param trimmed_prop_scr A trimmed `prop_scr` object
+#'
+#' @returns ggplot object
+#' @export
+#'
+#' @examples
+#' library(dplyr)
+#' ps_obj <- calc_prop_scr(internal_df = filter(int_norm_df, trt == 0),
+#'                         external_df = ex_norm_df,
+#'                         id_col = subjid,
+#'                         model = ~ cov1 + cov2 + cov3 + cov4)
+#' ps_obj_trimmed <- trim_ps(ps_obj, low = 0.1, high = 0.6)
+#' # Plotting the Propensity Scores
+#' prop_scr_cloud(ps_obj, trimmed_prop_scr = ps_obj_trimmed)
+#'
+#' @importFrom dplyr if_else anti_join
+#' @importFrom ggplot2 position_jitter scale_shape_manual
+prop_scr_cloud <- function(x, trimmed_prop_scr = NULL){
+  test_prop_scr(x)
+
+  graph_df <- bind_rows(x$external_df, x$internal_df) |>
+    mutate(arm = if_else(.data$`___internal___`, "Internal Control", "External Control"))
+
+  if(is.null(trimmed_prop_scr)){
+    plot <- ggplot(graph_df, aes(x = .data$`___ps___`, y = .data$arm)) +
+      geom_point(position = position_jitter(width = 0, height = .1))
+
+  } else {
+    nontrimmed_df <- bind_rows(trimmed_prop_scr$external_df, trimmed_prop_scr$internal_df) |>
+      mutate(arm = if_else(.data$`___internal___`, "Internal Control", "External Control"),
+             trimmed = FALSE)
+    by_vars <- intersect(colnames(graph_df), colnames(nontrimmed_df))
+    trimmed_df <- anti_join(graph_df, nontrimmed_df, by = by_vars) |>
+      mutate(trimmed = TRUE)
+    graph_df <- bind_rows(nontrimmed_df, trimmed_df)
+
+    plot <- ggplot(graph_df, aes(x = .data$`___ps___`, y =.data$ arm,
+                                 color = .data$trimmed, shape = .data$trimmed)) +
+      geom_point(position = position_jitter(width = 0, height = .1)) +
+      scale_color_manual(values = c("#5398BE", "#FFA21F"),
+                         labels = c("TRUE" =  "Yes", "FALSE" = "No")) +
+      scale_shape_manual(values = c(16, 4),
+                         labels = c("TRUE" =  "Yes", "FALSE" = "No"))
+
+  }
+
+  plot +
+    labs(y = "Arm", x = "Propensity Score", color = "Trimmed",
+         shape = "Trimmed") +
+    ggtitle("Propensity Score Cloud Plot") +
+    theme_bw()
+
+}

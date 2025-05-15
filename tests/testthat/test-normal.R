@@ -4,8 +4,10 @@
 skip_on_cran()
 ### Source R script with Stan code and compile Stan models
 source("code_for_normal_tests_Stan.R")
+
 # compile Stan model - sigma2 known
 stan_mod_sigma2_known <- rstan::stan_model(model_code = BDB_stan_sigma2_known)
+
 # compile Stan model - sigma2 unknown
 stan_mod_sigma2_unknown <- rstan::stan_model(model_code = BDB_stan_sigma2_unknown)
 
@@ -259,6 +261,23 @@ test_that("calc_power_prior_norm handles invalid external sd", {
                                      response=y,
                                      prior=dist_normal(50, 10),
                                      external_sd = "a"))
+})
+
+# Test for internal and external data with different response variable names
+test_that("calc_power_prior_norm handles different response variable names", {
+  int <- int_norm_df
+  ex <- ex_norm_df |>
+    dplyr::rename(y2 = y)
+  init_prior <- dist_normal(mu = 0.5, sigma = 10)
+
+  ps_obj <- calc_prop_scr(internal_df = filter(int, trt == 0),
+                          external_df = ex,
+                          id_col = subjid,
+                          model = ~ cov1 + cov2 + cov3 + cov4)
+
+  expect_error(calc_power_prior_norm(external_data = ps_obj,
+                                     response = y,
+                                     prior = init_prior))
 })
 
 ################################################################################

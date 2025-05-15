@@ -71,6 +71,8 @@ calc_power_prior_beta <- function(external_data, response, prior){
   check <- safely(select)(data, !!response)
   if(!is.null(check$error)){
     cli_abort("{.agr response} was not found in {.agr external_data}")
+  } else if(all(is.na(check$result))){
+    cli_abort("{.agr response} is all NA")
   }
 
   prior_checks(prior, "beta")
@@ -154,7 +156,7 @@ calc_power_prior_beta <- function(external_data, response, prior){
 #' # This function can be used directly on the data
 #' calc_power_prior_norm(ex_norm_df,
 #'                       response = y,
-#'                       prior = dist_normal(50, 10),
+#'                       prior = dist_normal(0.5, 10),
 #'                       external_sd = 0.15)
 #'
 #' # Or this function can be used with a propensity score object
@@ -164,7 +166,7 @@ calc_power_prior_beta <- function(external_data, response, prior){
 #'                         model = ~ cov1 + cov2 + cov3 + cov4)
 #' calc_power_prior_norm(ps_obj,
 #'                       response = y,
-#'                       prior = dist_normal(50, 10),
+#'                       prior = dist_normal(0.5, 10),
 #'                       external_sd = 0.15)
 #'
 calc_power_prior_norm <- function(external_data, response, prior = NULL, external_sd = NULL){
@@ -183,6 +185,8 @@ calc_power_prior_norm <- function(external_data, response, prior = NULL, externa
   check <- safely(select)(data, !!response)
   if(!is.null(check$error)){
     cli_abort("{.agr response} was not found in {.agr external_data}")
+  } else if(all(is.na(check$result))){
+    cli_abort("{.agr response} is all NA")
   }
 
   # mean of IP-weighted power prior
@@ -271,7 +275,7 @@ calc_power_prior_norm <- function(external_data, response, prior = NULL, externa
 #'   The power prior for \eqn{\boldsymbol{\theta}_C} does not have a closed form, and
 #'   thus we approximate it via a bivariate normal distribution; i.e.,
 #'   \deqn{\boldsymbol{\theta}_C \mid \boldsymbol{y}_E, \boldsymbol{\nu}_E, \hat{\boldsymbol{a}}_0
-#'   \; \dot\sim \; \mbox{MVN} \left( \tilde{\boldsymbol{\mu}}_0, \tilde{\boldsymbol{\Sigma}}_0 \right)}.
+#'   \; \dot\sim \; \mbox{MVN} \left( \tilde{\boldsymbol{\mu}}_0, \tilde{\boldsymbol{\Sigma}}_0 \right).}
 #'   If `approximation = Laplace`, then \eqn{\tilde{\boldsymbol{\mu}}_0} is the mode vector
 #'   of the IPW power prior and \eqn{\tilde{\boldsymbol{\Sigma}}_0} is the negative
 #'   inverse of the Hessian of the log IPW power prior evaluated at the mode. If
@@ -337,11 +341,16 @@ calc_power_prior_weibull <- function(external_data,
   check_response <- safely(select)(data, !!response)
   if(!is.null(check_response$error)){
     cli_abort("{.agr response} was not found in {.agr external_data}")
+  } else if(all(is.na(check_response$result))){
+    cli_abort("{.agr response} is all NA")
   }
+
   event <- enquo(event)
   check_event <- safely(select)(data, !!event)
   if(!is.null(check_event$error)){
     cli_abort("{.agr event} was not found in {.agr external_data}")
+  } else if(all(is.na(check_event$result))){
+    cli_abort("{.agr event} is all NA")
   }
   # Check beta
   prior_checks(intercept, "normal")
